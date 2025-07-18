@@ -1,15 +1,13 @@
 import express from "express";
 import http from "http";
 import 'dotenv/config';
-import { WSService } from "./src/ws/wsService";
+import { WSService } from "./src/services/wsService";
 import { connectToDatabase } from "./src/database/mongo/connection/mongo";
-// import { router } from './src/routes/index';
 
 const app = express();
 const server = http.createServer(app);
 
 app.use(express.json());
-// app.use('/room', router);
 
 (async () => {
   await connectToDatabase();
