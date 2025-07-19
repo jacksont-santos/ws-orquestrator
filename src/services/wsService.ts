@@ -29,16 +29,16 @@ export class WSService {
       ws.socketId = randomUUID();
       this.socketIdMap.set(ws.socketId, ws);
 
-      ws.on("pong", () => ((ws as any).isAlive = true));
+      ws.on("pong", () => (ws.isAlive = true));
       ws.on("error", (err) => console.error(err));
       ws.on("message", (message: string) => this.onMessage(ws, message));
       ws.on("close", () => this.onClose(ws));
     });
 
     setInterval(() => {
-      this.wss.clients.forEach((ws) => {
-        if (!(ws as any).isAlive) return ws.terminate();
-        (ws as any).isAlive = false;
+      this.wss.clients.forEach((ws: CustomWebSocket) => {
+        if (!ws.isAlive) return ws.terminate();
+        ws.isAlive = false;
         ws.ping();
       });
     }, this.heartbeatInterval);
@@ -63,7 +63,7 @@ export class WSService {
           break;
           
         case MessageType.SIGNOUT_ROOM:
-          await this.signoutRoom(data, ws, userId);
+          await this.signoutRoom(data, ws);
           break;
 
         case MessageType.ADD_ROOM:
@@ -145,7 +145,7 @@ export class WSService {
     ws: CustomWebSocket,
     userId?: string
   ): Promise<void> {
-    const { roomId, nickname, password } = data;
+    const { roomId, nickname, password, token } = data;
 
     if (!roomId || !nickname)
       throw { type: "error", message: "Invalid signin data" };
@@ -154,6 +154,7 @@ export class WSService {
       this.redis.get(roomId, "users") as Promise<RoomState["users"]>,
       roomModel.findById(roomId, {
         _id: 1,
+        ownerId: 1,
         maxUsers: 1,
         active: 1,
         public: 1,
@@ -162,33 +163,34 @@ export class WSService {
     ]);
     const users = response[0].status === "fulfilled" ? response[0].value : null;
     const room = response[1].status === "fulfilled" ? response[1].value : null;
+
+    const connectedUser = users?.find((u) => u.nickname === nickname);
+    if (connectedUser && token != connectedUser.token) return;
+
     if (!room) throw { type: "error", message: "Room not found" };
     if (!room.active) throw { type: "error", message: "Inactive room" };
-    if (users?.length >= room.maxUsers)
+    if (!connectedUser && users?.length >= room.maxUsers)
       throw { type: "error", message: "Room is full" };
 
-    if (!room.public) {
+    if (!room.public && userId !== room.ownerId) {
       if (!password) throw { type: "error", message: "Password required" };
       const decodedPassword = verifyPassword(password);
       if (!decodedPassword || decodedPassword !== password)
         throw { type: "error", message: "Invalid password" };
-    }
+    };
 
     this.publicClients.delete(ws);
     this.removePrivateClient(ws);
     if (this.roomClients.has(roomId)) this.roomClients.get(roomId)!.add(ws);
     else this.roomClients.set(roomId, new Set([ws]));
 
-    const user = users?.find((u) => u.nickname === nickname);
-    if (user) return;
-
     const state = {
       nickname,
       token: signJWT({ roomId, nickname, date: new Date() }),
-      socketId: (ws as any).socketId,
+      socketId: ws.socketId,
     };
-    const updatedRoomState = [...(users || []), state];
-    // await this.redis.set(roomId, 'users', updatedRoomState);
+    const updatedRoomState = connectedUser ? users : [...(users || []), state];
+
     await this.redis.set(roomId, "users", updatedRoomState);
 
     const userMessage: OutMessage = {
@@ -197,13 +199,14 @@ export class WSService {
     };
     this.send(ws, JSON.stringify(userMessage));
 
+    if (connectedUser) return;
     await timer(1000);
 
     const roomMessage: OutMessage = {
       type: MessageType.SIGNIN_ROOM,
       data: { _id: roomId, nickname },
     };
-    this.notifyClients(JSON.stringify(roomMessage), false, roomId);
+    this.notifyClients(JSON.stringify(roomMessage), roomId);
 
     const clientsMessage: OutMessage = {
       type: MessageType.UPDATE_ROOM_STATE,
@@ -211,42 +214,50 @@ export class WSService {
     };
     this.notifyClients(
       JSON.stringify(clientsMessage),
-      room.public,
       undefined,
-      userId
+      room.public ? undefined : room.ownerId
     );
   }
 
   private async signoutRoom(
     data: any,
     ws: CustomWebSocket,
-    userId?: string
   ): Promise<void> {
     const { roomId, nickname, token } = data;
     if (!roomId || !nickname || !token)
       throw { type: "error", message: "Invalid signout data" };
 
-    const [roomState, room] = await Promise.all([
+    const response = await Promise.allSettled([
       this.redis.get(roomId, "users") as Promise<RoomState["users"]>,
-      roomModel.findById(roomId, { _id: 1, public: 1 }),
+      roomModel.findById(roomId, {
+        ownerId: 1,
+        public: 1,
+      }),
     ]);
+    const users = response[0].status === "fulfilled" ? response[0].value : null;
+    const room = response[1].status === "fulfilled" ? response[1].value : null;
+
+    const connectedUser = users?.find((u) => u.token === token);
+    if (!connectedUser) return;
     if (!room) throw { type: "error", message: "Room not found" };
-    if (!roomState) throw { type: "error", message: "Room state not found" };
 
     this.roomClients.get(roomId)?.delete(ws);
     if (this.roomClients.get(roomId)?.size === 0)
       this.roomClients.delete(roomId);
 
-    const updatedUsers = roomState?.filter((u) => u.token != token);
+    const updatedUsers = users?.filter((u) => u.token != token);
     if (updatedUsers?.length === 0) await this.redis.del(roomId, "users");
-    // else await this.redis.set(roomId, 'users', updatedUsers);
     else await this.redis.set(roomId, "users", updatedUsers);
 
     const roomMessage: OutMessage = {
       type: MessageType.SIGNOUT_ROOM,
-      data: { _id: roomId, nickname },
+      data: {
+        _id: roomId,
+        nickname: connectedUser.nickname,
+        users: updatedUsers.length,
+      },
     };
-    this.notifyClients(JSON.stringify(roomMessage), false, roomId);
+    this.notifyClients(JSON.stringify(roomMessage), roomId);
 
     const clientsMessage: OutMessage = {
       type: MessageType.UPDATE_ROOM_STATE,
@@ -254,15 +265,13 @@ export class WSService {
     };
     this.notifyClients(
       JSON.stringify(clientsMessage),
-      room.public,
       undefined,
-      userId
+      room.public ? undefined : room.ownerId
     );
   }
 
   private notifyClients(
     message: string,
-    isPublic?: boolean,
     roomId?: string,
     userId?: string
   ) {
@@ -270,20 +279,23 @@ export class WSService {
       this.roomClients
         .get(roomId)!
         .forEach((client) => this.send(client, message));
-    }
+    };
 
-    if (userId && this.privateClients.has(userId)) {
-      this.send(this.privateClients.get(userId)!.ws, message);
-    }
-
-    if (isPublic) {
+    if (!roomId && !userId) {
       this.publicClients.forEach((client) => this.send(client, message));
-    }
+      this.privateClients.forEach((client) => this.send(client.ws, message));
+    };
+
+    if (!roomId && userId && this.privateClients.has(userId)) {
+      this.send(this.privateClients.get(userId)!.ws, message);
+    };
+
   }
 
   private async notifyRoomUpdate(userId: string, raw: RawMessage) {
     const { roomId, public: isPublic } = raw.data;
-    this.notifyClients(JSON.stringify(raw), isPublic, roomId, userId);
+    this.notifyClients(JSON.stringify(raw), roomId);
+    this.notifyClients(JSON.stringify(raw), undefined, isPublic ? undefined : userId);
   }
 
   private async onChatMessage(ws: CustomWebSocket, raw: RawMessage) {
@@ -294,7 +306,7 @@ export class WSService {
         throw { type: "error", message: "Invalid chat data" };
 
       await this.updateRoomMessageState(roomId, nickname, token);
-      this.notifyClients(JSON.stringify(raw), false, roomId);
+      this.notifyClients(JSON.stringify(raw), roomId);
       await chatModel.updateOne(
         { roomId },
         {
@@ -350,9 +362,9 @@ export class WSService {
     if (userId) {
       const user = await userModel.exists({ _id: userId });
       if (user) {
-        this.privateClients.set(userId, { ws });
+        await this.removeRoomClient(ws);
         this.publicClients.delete(ws);
-        this.removeRoomClient(ws);
+        this.privateClients.set(userId, { ws });
       }
     }
   }
@@ -361,6 +373,7 @@ export class WSService {
     this.publicClients.delete(ws);
     this.removePrivateClient(ws);
     this.removeRoomClient(ws);
+    this.socketIdMap.delete(ws.socketId);
   }
 
   private removePrivateClient(ws: WebSocket) {
@@ -380,11 +393,10 @@ export class WSService {
           this.roomClients.delete(roomId);
         }
         promises.push(this.liberateRedisMemory(socketId, roomId));
-      }
-    }
+      };
+    };
 
     await Promise.all(promises);
-    this.socketIdMap.delete(socketId);
   }
 
   private async liberateRedisMemory(socketId: string, roomId: string) {
@@ -392,10 +404,33 @@ export class WSService {
       roomId,
       "users"
     )) as RoomState["users"];
-    if (roomState && roomState.some((u) => u.socketId === socketId)) {
+
+    const nicknameUser = roomState?.find((u) => u.socketId === socketId)?.nickname;
+    if (roomState && nicknameUser) {
       const filtered = roomState.filter((u) => u.socketId !== socketId);
       if (filtered.length === 0) await this.redis.del(roomId, "users");
       else await this.redis.set(roomId, "users", filtered);
-    }
+
+      this.notifyClients(
+        JSON.stringify({
+          type: MessageType.SIGNOUT_ROOM,
+          data: {
+            _id: roomId,
+            users: filtered.length,
+            nickname: nicknameUser
+          },
+        }),
+        roomId
+      );
+      const room = await roomModel.findById(roomId, { public: 1, ownerId: 1  });
+      this.notifyClients(
+        JSON.stringify({
+          type: MessageType.UPDATE_ROOM_STATE,
+          data: { _id: roomId, users: filtered.length },
+        }),
+        undefined,
+        room.public ? undefined : room.ownerId
+      );
+    };
   }
 }
