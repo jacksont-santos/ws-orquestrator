@@ -38,4 +38,8 @@ export default class RedisInstance {
   async del(key: string, field: string): Promise<number | string> {
     return await this.client.hDel(key, field);
   };
+
+  async keys(): Promise<string[]> {
+    return await this.client.keys('*');
+  };
 }

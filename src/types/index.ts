@@ -3,6 +3,7 @@ import { MessageType } from "../utils/messageTypes";
 export interface RawMessage {
   type: MessageType;
   userId?: string;
+  authToken?: string;
   data?: any;
 }
 
@@ -16,7 +17,7 @@ export interface RoomState {
   users: Array<{
     nickname: string;
     token: string;
-    socketId?: string;
+    socketId?: Array<string>;
     lastMessage?: Date;
   }>;
 }

@@ -1,6 +1,7 @@
 export enum MessageType {
   PUBLIC = 'public',
   PRIVATE = 'private',
+  CONNECTION = 'connection',
   ADD_ROOM = 'addRoom',
   UPDATE_ROOM = 'updateRoom',
   REMOVE_ROOM = 'removeRoom',

@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { randomUUID } from 'crypto';
 
 type Chat = {
+  id: string;
   nickname: string;
   content: string;
   createdAt: Date;

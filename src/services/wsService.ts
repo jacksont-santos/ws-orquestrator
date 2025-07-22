@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { chatModel, roomModel, userModel } from "../database/mongo/models";
 import Redis from "../redis/redisClient";
-import { verifyPassword, signJWT } from "../utils/jwt";
+import { verifyToken, signJWT } from "../utils/jwt";
 import { randomUUID } from "crypto";
 import { MessageType } from "../utils/messageTypes";
 import { CustomWebSocket } from "../utils/customWebSocket";
@@ -17,9 +17,8 @@ export class WSService {
   private heartbeatInterval = 30000;
 
   private publicClients = new Set<CustomWebSocket>();
-  private privateClients = new Map<string, { ws: CustomWebSocket }>();
+  private privateClients = new Map<string, Set<CustomWebSocket>>();
   private roomClients = new Map<string, Set<CustomWebSocket>>();
-  private socketIdMap = new Map<string, CustomWebSocket>();
 
   private redis = new Redis();
 
@@ -27,7 +26,6 @@ export class WSService {
     this.wss.on("connection", (ws: CustomWebSocket) => {
       ws.isAlive = true;
       ws.socketId = randomUUID();
-      this.socketIdMap.set(ws.socketId, ws);
 
       ws.on("pong", () => (ws.isAlive = true));
       ws.on("error", (err) => console.error(err));
@@ -41,13 +39,14 @@ export class WSService {
         ws.isAlive = false;
         ws.ping();
       });
+      this.removeJunkRedisData();
     }, this.heartbeatInterval);
   }
 
   private async onMessage(ws: CustomWebSocket, message: string) {
     try {
       const raw: RawMessage = JSON.parse(message);
-      const { type, userId, data } = raw;
+      const { type, userId, authToken, data } = raw;
 
       switch (type) {
         case MessageType.PUBLIC:
@@ -77,7 +76,7 @@ export class WSService {
           break;
 
         case MessageType.ROOM_STATE:
-          await this.getRoomState(ws, data);
+          await this.getRoomState(ws, data, authToken);
           break;
 
         case MessageType.ROOMS_STATE:
@@ -98,9 +97,23 @@ export class WSService {
 
   private async getRoomState(
     ws: CustomWebSocket,
-    data: any
+    data: any,
+    authToken?: string
   ): Promise<any> {
     const { roomId } = data;
+    const room = await roomModel.findById(roomId, { _id: 1, public: 1, ownerId: 1 });
+    if (!room) throw { type: "error", message: "Room not found" };
+
+    const userId = authToken ? verifyToken(authToken)?._id : null;
+    if (!room.public && room.ownerId !== userId) {
+      const message: OutMessage = {
+        type: MessageType.ROOM_STATE,
+        data: { _id: roomId, users: 0 },
+      };
+      this.send(ws, JSON.stringify(message));
+      return;
+    };
+    
     const roomState = (await this.redis.get(
       roomId,
       "users"
@@ -109,7 +122,7 @@ export class WSService {
 
     const message: OutMessage = {
       type: MessageType.ROOM_STATE,
-      data: { users },
+      data: { _id: roomId, users },
     };
     this.send(ws, JSON.stringify(message));
   }
@@ -161,7 +174,7 @@ export class WSService {
         password: 1,
       }),
     ]);
-    const users = response[0].status === "fulfilled" ? response[0].value : null;
+    let users = response[0].status === "fulfilled" ? response[0].value : null;
     const room = response[1].status === "fulfilled" ? response[1].value : null;
 
     const connectedUser = users?.find((u) => u.nickname === nickname);
@@ -174,7 +187,7 @@ export class WSService {
 
     if (!room.public && userId !== room.ownerId) {
       if (!password) throw { type: "error", message: "Password required" };
-      const decodedPassword = verifyPassword(password);
+      const decodedPassword = verifyToken(password);
       if (!decodedPassword || decodedPassword !== password)
         throw { type: "error", message: "Invalid password" };
     };
@@ -184,27 +197,35 @@ export class WSService {
     if (this.roomClients.has(roomId)) this.roomClients.get(roomId)!.add(ws);
     else this.roomClients.set(roomId, new Set([ws]));
 
-    const state = {
+    
+    const sameUser = users?.find((u) => u.token === token);
+    if (sameUser) {
+      sameUser.socketId = sameUser.socketId.includes(ws.socketId)
+        ? sameUser.socketId
+        : [...sameUser.socketId, ws.socketId];
+    };
+    let newUser = {
       nickname,
       token: signJWT({ roomId, nickname, date: new Date() }),
-      socketId: ws.socketId,
+      socketId: [ws.socketId]
     };
-    const updatedRoomState = connectedUser ? users : [...(users || []), state];
+
+    const updatedRoomState = sameUser ? users : [...(users || []), newUser];
 
     await this.redis.set(roomId, "users", updatedRoomState);
 
     const userMessage: OutMessage = {
       type: MessageType.SIGNIN_REPLY,
-      data: { _id: roomId, token: state.token },
+      data: { _id: roomId, token: sameUser ? sameUser.token : newUser.token },
     };
     this.send(ws, JSON.stringify(userMessage));
 
-    if (connectedUser) return;
+    if (sameUser) return;
     await timer(1000);
 
     const roomMessage: OutMessage = {
       type: MessageType.SIGNIN_ROOM,
-      data: { _id: roomId, nickname },
+      data: { _id: roomId, nickname, users: updatedRoomState.length },
     };
     this.notifyClients(JSON.stringify(roomMessage), roomId);
 
@@ -245,7 +266,9 @@ export class WSService {
     if (this.roomClients.get(roomId)?.size === 0)
       this.roomClients.delete(roomId);
 
-    const updatedUsers = users?.filter((u) => u.token != token);
+    connectedUser.socketId = connectedUser.socketId.filter((id) => id !== ws.socketId);
+    const updatedUsers = users.filter((u) => u.socketId.length === 0) as RoomState["users"];
+
     if (updatedUsers?.length === 0) await this.redis.del(roomId, "users");
     else await this.redis.set(roomId, "users", updatedUsers);
 
@@ -283,11 +306,13 @@ export class WSService {
 
     if (!roomId && !userId) {
       this.publicClients.forEach((client) => this.send(client, message));
-      this.privateClients.forEach((client) => this.send(client.ws, message));
+      this.privateClients.forEach((user) => {
+        user.forEach((client) => this.send(client, message));
+      });
     };
 
     if (!roomId && userId && this.privateClients.has(userId)) {
-      this.send(this.privateClients.get(userId)!.ws, message);
+      this.privateClients.get(userId).forEach((client) => this.send(client, message));
     };
 
   }
@@ -300,19 +325,24 @@ export class WSService {
 
   private async onChatMessage(ws: CustomWebSocket, raw: RawMessage) {
     try {
-      const data = JSON.parse(raw.data);
-      const { roomId, nickname, content, token } = data;
+      const { roomId, nickname, content, token } = raw.data;
       if (!roomId || !nickname || !content || !token)
         throw { type: "error", message: "Invalid chat data" };
 
-      await this.updateRoomMessageState(roomId, nickname, token);
+      await this.updateRoomMessageState(roomId, token);
+
+      const chatId = randomUUID();
+      raw.data.Id = chatId;
+      raw.data.createdAt = new Date();
       this.notifyClients(JSON.stringify(raw), roomId);
       await chatModel.updateOne(
         { roomId },
         {
           $push: {
-            chat: { nickname, content, createdAt: new Date() },
-            $position: 0,
+            chat: {
+              $each: [{ id: chatId, nickname, content, createdAt: raw.data.createdAt }],
+              $position: 0
+            }
           },
           $set: { updatedAt: new Date() },
         },
@@ -325,24 +355,23 @@ export class WSService {
 
   private async updateRoomMessageState(
     roomId: string,
-    nickname: string,
     token: string
   ): Promise<void> {
+    if (!roomId || !token) throw { type: "error", message: "Invalid room data" };
+
     const users = (await this.redis.get(roomId, "users")) as RoomState["users"];
-    const user = users?.find((u) => u.nickname === nickname);
+    const user = users?.find((u) => u.token === token);
     if (!user) throw { type: "error", message: "You are not in this room" };
-    if (user.token !== token) throw { type: "error", message: "Invalid token" };
+    user.lastMessage = new Date();
 
     const limit = Number(process.env.MINUTES_LIMIT_BETWEEN_MESSAGES) || 30;
     const cutoff = Date.now() - limit * 60 * 1000;
-
     const filtered = users?.filter(
       (u) =>
-        u.nickname !== nickname &&
+        u.nickname == user.nickname ||
         (!u.lastMessage || u.lastMessage.getTime() > cutoff)
     );
 
-    filtered.push({ nickname, token, lastMessage: new Date() });
     await this.redis.set(roomId, "users", filtered);
   }
 
@@ -352,34 +381,39 @@ export class WSService {
     }
   }
 
-  private setPublicClient(ws: CustomWebSocket) {
+  private async setPublicClient(ws: CustomWebSocket) {
     this.publicClients.add(ws);
     this.removePrivateClient(ws);
-    this.removeRoomClient(ws);
+    await this.removeRoomClient(ws);
+    this.getRoomsState(ws);
   }
 
   private async setPrivateClient(ws: CustomWebSocket, userId: string) {
     if (userId) {
       const user = await userModel.exists({ _id: userId });
       if (user) {
-        await this.removeRoomClient(ws);
         this.publicClients.delete(ws);
-        this.privateClients.set(userId, { ws });
-      }
-    }
+        if (!this.privateClients.has(userId)) this.privateClients.set(userId, new Set([ws]));
+        else this.privateClients.get(userId)!.add(ws);
+        await this.removeRoomClient(ws);
+        this.getRoomsState(ws, userId);
+      };
+    };
   }
 
-  private onClose(ws: CustomWebSocket) {
+  private async onClose(ws: CustomWebSocket) {
     this.publicClients.delete(ws);
     this.removePrivateClient(ws);
-    this.removeRoomClient(ws);
-    this.socketIdMap.delete(ws.socketId);
+    await this.removeRoomClient(ws);
   }
 
-  private removePrivateClient(ws: WebSocket) {
-    for (const [id, client] of Array.from(this.privateClients.entries())) {
-      if (client.ws === ws) this.privateClients.delete(id);
-    }
+  private removePrivateClient(ws: CustomWebSocket) {
+    for (const [userId, wsSet] of Array.from(this.privateClients.entries())) {
+      if (wsSet.has(ws)) {
+        wsSet.delete(ws);
+        if (wsSet.size === 0) this.privateClients.delete(userId);
+      };
+    };
   }
 
   private async removeRoomClient(ws: CustomWebSocket) {
@@ -400,16 +434,21 @@ export class WSService {
   }
 
   private async liberateRedisMemory(socketId: string, roomId: string) {
-    const roomState = (await this.redis.get(
+    let roomState = (await this.redis.get(
       roomId,
       "users"
     )) as RoomState["users"];
 
-    const nicknameUser = roomState?.find((u) => u.socketId === socketId)?.nickname;
-    if (roomState && nicknameUser) {
-      const filtered = roomState.filter((u) => u.socketId !== socketId);
+    const user = roomState?.find((u) => u.socketId.includes(socketId));
+    if (roomState && user) {
+
+      user.socketId = user.socketId.filter((id) => id !== socketId);
+      const filtered = roomState.filter((u) => u.socketId.length > 0);
+
       if (filtered.length === 0) await this.redis.del(roomId, "users");
       else await this.redis.set(roomId, "users", filtered);
+
+      if (user.socketId.length > 0) return;
 
       this.notifyClients(
         JSON.stringify({
@@ -417,7 +456,7 @@ export class WSService {
           data: {
             _id: roomId,
             users: filtered.length,
-            nickname: nicknameUser
+            nickname: user.nickname,
           },
         }),
         roomId
@@ -431,6 +470,36 @@ export class WSService {
         undefined,
         room.public ? undefined : room.ownerId
       );
+    };
+  }
+
+  private async removeJunkRedisData() {
+    const redisKeys = await this.redis.keys();
+    for (const key of redisKeys) {
+      if (!this.roomClients.has(key)) {
+        await this.redis.del(key, "users");
+        continue;
+      };
+
+      const roomClient = this.roomClients.get(key);
+      const ativeClients = Array.from(roomClient.values()).map((client) => client.socketId);
+
+      let roomState = (await this.redis.get( key, "users" )) as RoomState["users"];
+      if (!roomState || !roomState.length) {
+        await this.redis.del(key, "users");
+        continue;
+      };
+
+      roomState = roomState.map((user) => {
+        if (!user.socketId) return undefined;
+        user.socketId = user.socketId.filter((id) => ativeClients.includes(id));
+        if (user.socketId.length === 0) return undefined;
+        return user;
+      })
+      .filter((user) => user);
+
+      if (roomState.length === 0) await this.redis.del(key, "users");
+      else await this.redis.set(key, "users", roomState);
     };
   }
 }
