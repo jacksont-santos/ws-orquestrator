@@ -1,6 +1,6 @@
 import { createClient, RedisClientType } from "redis";
 
-export default class RedisInstance {
+export class RedisClient {
   private client: RedisClientType;
 
   constructor() {
@@ -12,17 +12,6 @@ export default class RedisInstance {
     await this.client.connect()
       .then(() => console.log("Redis Client Connected"))
       .catch((err) => console.log("Redis Client Error", err));
-  };
-
-  async getItems(keys: string[], field: string) {
-    const queries = keys.map( async (key) => ({
-      key,
-      value: await this.get(key, field)
-    }));
-    const response = await Promise.allSettled(queries);
-    return response
-      .map((res) => res.status === 'fulfilled' ? res.value : null)
-      .filter((doc) => doc !== null);
   };
 
   async get(key: string, field: string): Promise<any> {

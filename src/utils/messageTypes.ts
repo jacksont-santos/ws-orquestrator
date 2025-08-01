@@ -1,6 +1,4 @@
 export enum MessageType {
-  PUBLIC = 'public',
-  PRIVATE = 'private',
   CONNECTION = 'connection',
   ADD_ROOM = 'addRoom',
   UPDATE_ROOM = 'updateRoom',
@@ -8,6 +6,8 @@ export enum MessageType {
   SIGNIN_ROOM = 'signinRoom',
   SIGNOUT_ROOM = 'signoutRoom',
   SIGNIN_REPLY = 'signinReply',
+  SIGNOUT_REPLY = 'signoutReply',
+  SIGN_STATE = 'signState',
   UPDATE_ROOM_STATE = 'updateRoomState',
   ROOM_STATE = 'roomState',
   ROOMS_STATE = 'roomsState',
