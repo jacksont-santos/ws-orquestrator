@@ -54,7 +54,7 @@ export class Notifier {
     client.forEach((ws) => this.send(ws, message));
   }
 
-  broadcastToClients(type: MessageType, data: any, includePublic: boolean = true) {
+  broadcastToClients(type: MessageType, data: any) {
     const publicData: OutMessage = {
       type,
       data,
@@ -63,7 +63,7 @@ export class Notifier {
     this.privateClients.forEach((client) =>
       client.forEach((ws) => this.send(ws, message))
     );
-    if (includePublic) this.publicClients.forEach((ws) => this.send(ws, message));
+    this.publicClients.forEach((ws) => this.send(ws, message));
   }
 
   async dispatchRoomChange(raw: RawMessage) {
@@ -71,8 +71,19 @@ export class Notifier {
     const { roomId, public: isPublic } = data;
     if (!type || !roomId || !isPublic && !userId) return;
 
-    this.sendToRoom(type, roomId, data);
-    if (isPublic) this.broadcastToClients(type, data);
-    else this.sendToUser(type, userId, roomId, data);
+    if (
+      [
+        MessageType.ADD_ROOM,
+        MessageType.REMOVE_ROOM,
+        MessageType.UPDATE_ROOM
+      ].includes(type)
+    ) {
+      if (isPublic) this.broadcastToClients(type, data);
+      else this.sendToUser(type, userId, roomId, data);
+    };
+
+    if (type == MessageType.UPDATE_ROOM_STATE) {
+      this.sendToRoom(type, roomId, data);
+    };
   }
 }

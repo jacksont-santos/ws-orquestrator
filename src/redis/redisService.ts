@@ -4,11 +4,9 @@ import { CustomWebSocket } from "../utils/customWebSocket";
 import { MessageType } from "../utils/messageTypes";
 import { OutMessage, RoomState } from "../types";
 import { getUserId } from "../auth/user";
-// import { send } from "../utils/wsSender";
 import { Notifier } from "../notifier/notifier";
 
 export class RedisService {
-  // private redis: Redis;
 
   constructor(
     private notifier: Notifier,

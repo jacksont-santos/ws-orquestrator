@@ -3,10 +3,11 @@ import { RedisService } from "../redis/redisService";
 import { CustomWebSocket } from "../utils/customWebSocket";
 import { signJWT } from "../utils/jwt";
 import { MessageType } from "../utils/messageTypes";
-import { OutMessage, RoomState } from "../types";
+import { RoomState } from "../types";
 import { roomModel } from "../database/mongo/models";
 import { timer } from "../utils/timer";
 import { verifyToken } from "../utils/jwt";
+import { comparePasswords } from "../utils/crypto";
 
 export class SignRoom {
   constructor(
@@ -82,8 +83,8 @@ export class SignRoom {
 
     if (!room.public && ws.userId !== room.ownerId) {
       if (!password) throw { type: "error", message: "Password required" };
-      const decoded = verifyToken(password);
-      if (!decoded || decoded.password !== password)
+      const authenticated = comparePasswords(password, room.password);
+      if (!authenticated)
         throw { type: "error", message: "Invalid password" };
     }
 
@@ -110,19 +111,31 @@ export class SignRoom {
     });
     await timer(1000);
 
-    this.notifier.sendToRoom(MessageType.SIGNIN_ROOM, roomId, {
-      nickname,
-      users: updatedRoomState.length,
-    });
-    if (room.public) {
-      this.notifier.broadcastToClients(MessageType.UPDATE_ROOM_STATE, {
-        _id: roomId,
+    this.notifier.sendToRoom(
+      MessageType.SIGNIN_ROOM,
+      roomId,
+      {
+        nickname,
         users: updatedRoomState.length,
-      });
+      }
+    );
+    if (room.public) {
+      this.notifier.broadcastToClients(
+        MessageType.UPDATE_ROOM_STATE,
+        {
+          _id: roomId,
+          users: updatedRoomState.length,
+        }
+      );
     } else {
       this.notifier.sendToUser(
         MessageType.UPDATE_ROOM_STATE,
-        ws.userId,
+        room.ownerId,
+        roomId,
+        { users: updatedRoomState.length }
+      );
+      this.notifier.sendToRoom(
+        MessageType.UPDATE_ROOM_STATE,
         roomId,
         { users: updatedRoomState.length }
       );
@@ -184,7 +197,12 @@ export class SignRoom {
     } else {
       this.notifier.sendToUser(
         MessageType.UPDATE_ROOM_STATE,
-        ws.userId,
+        room.ownerId,
+        roomId,
+        { users: updatedUsers.length }
+      );
+      this.notifier.sendToRoom(
+        MessageType.UPDATE_ROOM_STATE,
         roomId,
         { users: updatedUsers.length }
       );
