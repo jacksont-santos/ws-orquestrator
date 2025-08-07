@@ -43,7 +43,7 @@ var crypto_1 = require("crypto");
 var messageTypes_1 = require("../utils/messageTypes");
 var user_1 = require("../auth/user");
 var WSService = /** @class */ (function () {
-    function WSService(publicClients, privateClients, roomClients, notifier, redis, signRoom) {
+    function WSService(server, publicClients, privateClients, roomClients, notifier, redis, signRoom) {
         var _this = this;
         this.publicClients = publicClients;
         this.privateClients = privateClients;
@@ -51,8 +51,8 @@ var WSService = /** @class */ (function () {
         this.notifier = notifier;
         this.redis = redis;
         this.signRoom = signRoom;
-        this.wss = new ws_1.WebSocketServer({ port: Number(process.env.WS_PORT) });
         this.heartbeatInterval = 30000;
+        this.wss = new ws_1.WebSocketServer({ server: server });
         this.wss.on("connection", function (ws) {
             ws.isAlive = true;
             ws.rooms = [];

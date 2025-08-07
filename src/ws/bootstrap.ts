@@ -1,4 +1,5 @@
 import { WSService } from "./wsService";
+import http from "http";
 import {
   publicClients,
   privateClients,
@@ -8,8 +9,9 @@ import {
   signRoom,
 } from "../instances";
 
-export function startWebSocketServer() {
+export function startWebSocketServer(server: http.Server) {
   new WSService(
+    server,
     publicClients,
     privateClients,
     roomClients,

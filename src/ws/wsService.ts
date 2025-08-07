@@ -3,6 +3,7 @@ import { RedisService } from "../redis/redisService";
 import { SignRoom } from "../handlers/signRoom";
 
 import { WebSocketServer } from "ws";
+import http from "http";
 import { chatModel } from "../database/mongo/models";
 import { randomUUID } from "crypto";
 import { MessageType } from "../utils/messageTypes";
@@ -12,10 +13,11 @@ import { setUser, removeUser, isAuthenticated } from "../auth/user";
 
 
 export class WSService {
-  private wss = new WebSocketServer({ port: Number(process.env.WS_PORT) });
+  private wss: WebSocketServer;
   private heartbeatInterval = 30000;
 
   constructor(
+    server: http.Server,
     private publicClients: Map<string, CustomWebSocket>,
     private privateClients: Map<string, Set<CustomWebSocket>>,
     private roomClients: Map<string, Set<CustomWebSocket>>,
@@ -23,6 +25,7 @@ export class WSService {
     private redis: RedisService,
     private signRoom: SignRoom
   ) {
+    this.wss = new WebSocketServer({ server});
     this.wss.on("connection", (ws: CustomWebSocket) => {
       ws.isAlive = true;
       ws.rooms = [];

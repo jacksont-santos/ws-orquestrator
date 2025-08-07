@@ -10,7 +10,7 @@ const server = http.createServer(app);
 app.use(express.json());
 
 connectToDatabase()
-startWebSocketServer();
+startWebSocketServer(server);
 
 const port = process.env.PORT || 3000;
 server.listen(port, () => {
