@@ -127,7 +127,7 @@ export class WSService {
       await this.redis.updateRoomMessageState(roomId, token, ws.socketId);
 
       const chatId = randomUUID();
-      raw.data.Id = chatId;
+      raw.data.id = chatId;
       raw.data.createdAt = new Date();
       this.notifier.sendToRoom(MessageType.CHAT, roomId, raw.data);
       await chatModel.updateOne(
