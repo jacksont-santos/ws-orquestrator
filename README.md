@@ -20,7 +20,5 @@ Parte da arquitetura de **microserviços**, este servidor é responsável pela c
 
 - **Node.js** + **TypeScript**
 - **ws** (WebSocket server)
-- **Redis** (armazenamento de estado e Pub/Sub)
-- **MongoDB** (persistência de dados)
-- **JWT** (autenticação)
-- **Yarn** (gerenciador de pacotes)
+- **Redis**
+- **MongoDB**
