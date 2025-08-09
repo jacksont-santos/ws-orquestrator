@@ -26,7 +26,7 @@ Parte da arquitetura de **microserviços**, este servidor é responsável pela c
 ## Links
 
 - **https://github.com/jacksont-santos/Talksy-App**
-- **https://github.com/jacksont-santos/manager-server-chat**
+- **https://github.com/jacksont-santos/Talksy-Server**
 
 # Talksy App
 
