@@ -22,3 +22,12 @@ Parte da arquitetura de **microserviços**, este servidor é responsável pela c
 - **ws** (WebSocket server)
 - **Redis**
 - **MongoDB**
+
+## Links
+
+- **https://github.com/jacksont-santos/Talksy-App**
+- **https://github.com/jacksont-santos/manager-server-chat**
+
+# Talksy App
+
+https://talksy-app-hmtq.onrender.com
