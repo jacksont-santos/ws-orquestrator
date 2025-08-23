@@ -124,7 +124,7 @@ export class WSService {
       if (!roomId || !nickname || !content || !token)
         throw { type: "error", message: "Invalid chat data" };
 
-      await this.redis.updateRoomMessageState(roomId, token, ws.socketId);
+      await this.redis.verifyRoomState(roomId, token, ws.socketId);
 
       const chatId = randomUUID();
       raw.data.id = chatId;

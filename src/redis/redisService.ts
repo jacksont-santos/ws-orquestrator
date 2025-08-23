@@ -101,7 +101,7 @@ export class RedisService {
     this.notifier.send(ws, JSON.stringify(message));
   }
 
-  async updateRoomMessageState(
+  async verifyRoomState(
     roomId: string,
     token: string,
     socketId: string
@@ -114,18 +114,6 @@ export class RedisService {
     if (!user || !user.socketId.includes(socketId))
       throw { type: "error", message: "You are not in this room" };
 
-    user.lastMessage = new Date();
-
-    const limit = Number(process.env.MINUTES_LIMIT_BETWEEN_MESSAGES) || 30;
-    const cutoff = Date.now() - limit * 60 * 1000;
-    const filtered = users?.filter(
-      (u) =>
-        u.nickname == user.nickname ||
-        !u.lastMessage ||
-        u.lastMessage.getTime() > cutoff
-    );
-
-    await this.redis.set(roomId, "users", filtered);
   }
 
   async liberateRedisMemory(socketId: string, roomId: string) {
@@ -170,6 +158,8 @@ export class RedisService {
 
   async removeJunkRedisData() {
     const redisKeys = await this.redis.keys();
+    if (!redisKeys || !redisKeys.length) return;
+
     for (const key of redisKeys) {
       const roomClient = this.roomClients.get(key);
       const ativeClients = roomClient

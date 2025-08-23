@@ -188,9 +188,9 @@ var RedisService = /** @class */ (function () {
             });
         });
     };
-    RedisService.prototype.updateRoomMessageState = function (roomId, token, socketId) {
+    RedisService.prototype.verifyRoomState = function (roomId, token, socketId) {
         return __awaiter(this, void 0, void 0, function () {
-            var users, user, limit, cutoff, filtered;
+            var users, user;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -202,17 +202,6 @@ var RedisService = /** @class */ (function () {
                         user = users === null || users === void 0 ? void 0 : users.find(function (u) { return u.token === token; });
                         if (!user || !user.socketId.includes(socketId))
                             throw { type: "error", message: "You are not in this room" };
-                        user.lastMessage = new Date();
-                        limit = Number(process.env.MINUTES_LIMIT_BETWEEN_MESSAGES) || 30;
-                        cutoff = Date.now() - limit * 60 * 1000;
-                        filtered = users === null || users === void 0 ? void 0 : users.filter(function (u) {
-                            return u.nickname == user.nickname ||
-                                !u.lastMessage ||
-                                u.lastMessage.getTime() > cutoff;
-                        });
-                        return [4 /*yield*/, this.redis.set(roomId, "users", filtered)];
-                    case 2:
-                        _a.sent();
                         return [2 /*return*/];
                 }
             });
@@ -274,6 +263,8 @@ var RedisService = /** @class */ (function () {
                     case 0: return [4 /*yield*/, this.redis.keys()];
                     case 1:
                         redisKeys = _a.sent();
+                        if (!redisKeys || !redisKeys.length)
+                            return [2 /*return*/];
                         _loop_1 = function (key) {
                             var roomClient, ativeClients, roomState;
                             return __generator(this, function (_b) {

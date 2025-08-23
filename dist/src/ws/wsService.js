@@ -190,11 +190,11 @@ var WSService = /** @class */ (function () {
                         _a = raw.data, roomId = _a.roomId, nickname = _a.nickname, content = _a.content, token = _a.token;
                         if (!roomId || !nickname || !content || !token)
                             throw { type: "error", message: "Invalid chat data" };
-                        return [4 /*yield*/, this.redis.updateRoomMessageState(roomId, token, ws.socketId)];
+                        return [4 /*yield*/, this.redis.verifyRoomState(roomId, token, ws.socketId)];
                     case 1:
                         _b.sent();
                         chatId = (0, crypto_1.randomUUID)();
-                        raw.data.Id = chatId;
+                        raw.data.id = chatId;
                         raw.data.createdAt = new Date();
                         this.notifier.sendToRoom(messageTypes_1.MessageType.CHAT, roomId, raw.data);
                         return [4 /*yield*/, models_1.chatModel.updateOne({ roomId: roomId }, {
