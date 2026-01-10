@@ -18,8 +18,7 @@ export class WSService {
 
   constructor(
     server: http.Server,
-    private publicClients: Map<string, CustomWebSocket>,
-    private privateClients: Map<string, Set<CustomWebSocket>>,
+    private clients: Map<string, Set<CustomWebSocket>>,
     private roomClients: Map<string, Set<CustomWebSocket>>,
     private notifier: Notifier,
     private redis: RedisService,
@@ -102,26 +101,16 @@ export class WSService {
     }
   }
 
-  private async connect(ws: CustomWebSocket, authToken?: string) {
-    if (authToken) this.addPrivateClient(ws, authToken);
-    else this.addPublicClient(ws);
-    this.redis.getRoomsState(ws);
-  }
-  private async addPrivateClient(ws: CustomWebSocket, authToken: string) {
+  private async connect(ws: CustomWebSocket, authToken: string) {
     await setUser(ws, authToken);
-    this.privateClients.set(ws.userId, new Set([ws]));
-    this.publicClients.delete(ws.userId);
-  }
-  private addPublicClient(ws: CustomWebSocket) {
-    if (isAuthenticated(ws)) this.removePrivateClient(ws.socketId, ws.userId);
-    removeUser(ws);
-    this.publicClients.set(ws.socketId, ws);
+    this.clients.set(ws.userId, new Set([ws]));
+    this.redis.getRoomsState(ws);
   }
 
   private async onChatMessage(ws: CustomWebSocket, raw: RawMessage) {
     try {
-      const { roomId, nickname, content, token } = raw.data;
-      if (!roomId || !nickname || !content || !token)
+      const { roomId, username, content, token } = raw.data;
+      if (!roomId || !username || !content || !token)
         throw { type: "error", message: "Invalid chat data" };
 
       await this.redis.verifyRoomState(roomId, token, ws.socketId);
@@ -138,7 +127,7 @@ export class WSService {
               $each: [
                 {
                   id: chatId,
-                  nickname,
+                  username,
                   content,
                   createdAt: raw.data.createdAt,
                 },
@@ -156,19 +145,14 @@ export class WSService {
   }
 
   private async onClose(ws: CustomWebSocket) {
-    this.removePublicClient(ws.socketId);
-    this.removePrivateClient(ws.socketId, ws.userId);
+    this.removeClient(ws.socketId, ws.userId);
     await this.removeRoomClient(ws);
   }
 
-  private removePublicClient(socketId: string) {
-    this.publicClients.delete(socketId);
-  }
 
-  private removePrivateClient(socketId: string, userId: string) {
-    if (!userId) return;
 
-    const clients = this.privateClients.get(userId);
+  private removeClient(socketId: string, userId: string) {
+    const clients = this.clients.get(userId);
     if (!clients) return;
 
     for (const ws of Array.from(clients)) {
@@ -178,8 +162,9 @@ export class WSService {
       }
     }
 
-    if (clients.size === 0) this.privateClients.delete(userId);
+    if (clients.size === 0) this.clients.delete(userId);
   }
+
   private async removeRoomClient(ws: CustomWebSocket) {
     const socketId = ws.socketId;
 

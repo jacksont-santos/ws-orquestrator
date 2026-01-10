@@ -4,7 +4,7 @@ import { CustomWebSocket } from "../utils/customWebSocket";
 import { signJWT } from "../utils/jwt";
 import { MessageType } from "../utils/messageTypes";
 import { RoomState } from "../types";
-import { roomModel } from "../database/mongo/models";
+import { roomModel, roomHistoryModel } from "../database/mongo/models";
 import { timer } from "../utils/timer";
 import { verifyToken } from "../utils/jwt";
 import { comparePasswords } from "../utils/crypto";
@@ -17,9 +17,9 @@ export class SignRoom {
   ) {}
 
   async signIn(data: any, ws: CustomWebSocket): Promise<void> {
-    const { roomId, nickname, password, roomToken } = data;
+    const { roomId, username, password, roomToken } = data;
 
-    if (!roomId || !nickname)
+    if (!roomId || !username)
       throw { type: "error", message: "Invalid signin data" };
 
     const response = await Promise.allSettled([
@@ -69,12 +69,13 @@ export class SignRoom {
         : [...connectedUser.socketId, ws.socketId];
 
       await this.redis.set(roomId, "users", users);
+      await this.registerRoomHistory(roomId, ws.userId!);
 
       return;
-    }
+    };
 
-    const invalidNickname = users?.find((u) => u.nickname === nickname);
-    if (invalidNickname) return;
+    const invalidUsername = users?.find((u) => u.username === username);
+    if (invalidUsername) return;
 
     if (!room) throw { type: "error", message: "Room not found" };
     if (!room.active) throw { type: "error", message: "Inactive room" };
@@ -89,12 +90,13 @@ export class SignRoom {
     }
 
     let user = {
-      nickname,
-      token: signJWT({ roomId, nickname, date: new Date() }),
+      username,
+      token: signJWT({ roomId, username, date: new Date() }),
       socketId: [ws.socketId],
     };
     const updatedRoomState = [...(users || []), user];
     await this.redis.set(roomId, "users", updatedRoomState);
+    await this.registerRoomHistory(roomId, ws.userId!);
 
     if (!ws.rooms) ws.rooms = [];
     if (!ws.rooms.includes(roomId)) ws.rooms.push(roomId);
@@ -115,7 +117,7 @@ export class SignRoom {
       MessageType.SIGNIN_ROOM,
       roomId,
       {
-        nickname,
+        username,
         users: updatedRoomState.length,
       }
     );
@@ -143,8 +145,8 @@ export class SignRoom {
   }
 
   async signOut(data: any, ws: CustomWebSocket): Promise<void> {
-    const { roomId, nickname, roomToken } = data;
-    if (!roomId || !nickname || !roomToken)
+    const { roomId, username, roomToken } = data;
+    if (!roomId || !username || !roomToken)
       throw { type: "error", message: "Invalid signout data" };
 
     const response = await Promise.allSettled([
@@ -186,7 +188,7 @@ export class SignRoom {
     if (user.socketId.length > 0) return;
 
     this.notifier.sendToRoom(MessageType.SIGNOUT_ROOM, roomId, {
-      nickname,
+      username,
       users: updatedUsers.length,
     });
     if (room.public) {
@@ -238,5 +240,19 @@ export class SignRoom {
       _id: roomId,
       authenticated: true,
     });
+  }
+
+  private registerRoomHistory(roomId: string, userId: string) {
+    return roomHistoryModel.findOneAndUpdate(
+        { roomId },
+        { 
+          $addToSet: { users: userId },
+          $set: { updatedAt: new Date() },
+        },
+        { 
+          upsert: true,
+          setDefaultsOnInsert: true,
+        }
+      );
   }
 }

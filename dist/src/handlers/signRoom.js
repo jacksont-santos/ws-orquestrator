@@ -60,12 +60,12 @@ var SignRoom = /** @class */ (function () {
     }
     SignRoom.prototype.signIn = function (data, ws) {
         return __awaiter(this, void 0, void 0, function () {
-            var roomId, nickname, password, roomToken, response, users, room, tokenData, connectedUser, invalidNickname, authenticated, user, updatedRoomState;
+            var roomId, username, password, roomToken, response, users, room, tokenData, connectedUser, invalidUsername, authenticated, user, updatedRoomState;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        roomId = data.roomId, nickname = data.nickname, password = data.password, roomToken = data.roomToken;
-                        if (!roomId || !nickname)
+                        roomId = data.roomId, username = data.username, password = data.password, roomToken = data.roomToken;
+                        if (!roomId || !username)
                             throw { type: "error", message: "Invalid signin data" };
                         return [4 /*yield*/, Promise.allSettled([
                                 this.redis.get(roomId, "users"),
@@ -82,7 +82,7 @@ var SignRoom = /** @class */ (function () {
                         response = _a.sent();
                         users = response[0].status === "fulfilled" ? response[0].value : null;
                         room = response[1].status === "fulfilled" ? response[1].value : null;
-                        if (!roomToken) return [3 /*break*/, 3];
+                        if (!roomToken) return [3 /*break*/, 4];
                         tokenData = (0, jwt_2.verifyToken)(roomToken);
                         if (!tokenData)
                             throw { type: "error", message: "Invalid room token" };
@@ -113,10 +113,14 @@ var SignRoom = /** @class */ (function () {
                         return [4 /*yield*/, this.redis.set(roomId, "users", users)];
                     case 2:
                         _a.sent();
-                        return [2 /*return*/];
+                        return [4 /*yield*/, this.registerRoomHistory(roomId, ws.userId)];
                     case 3:
-                        invalidNickname = users === null || users === void 0 ? void 0 : users.find(function (u) { return u.nickname === nickname; });
-                        if (invalidNickname)
+                        _a.sent();
+                        return [2 /*return*/];
+                    case 4:
+                        ;
+                        invalidUsername = users === null || users === void 0 ? void 0 : users.find(function (u) { return u.username === username; });
+                        if (invalidUsername)
                             return [2 /*return*/];
                         if (!room)
                             throw { type: "error", message: "Room not found" };
@@ -132,13 +136,16 @@ var SignRoom = /** @class */ (function () {
                                 throw { type: "error", message: "Invalid password" };
                         }
                         user = {
-                            nickname: nickname,
-                            token: (0, jwt_1.signJWT)({ roomId: roomId, nickname: nickname, date: new Date() }),
+                            username: username,
+                            token: (0, jwt_1.signJWT)({ roomId: roomId, username: username, date: new Date() }),
                             socketId: [ws.socketId],
                         };
                         updatedRoomState = __spreadArray(__spreadArray([], (users || []), true), [user], false);
                         return [4 /*yield*/, this.redis.set(roomId, "users", updatedRoomState)];
-                    case 4:
+                    case 5:
+                        _a.sent();
+                        return [4 /*yield*/, this.registerRoomHistory(roomId, ws.userId)];
+                    case 6:
                         _a.sent();
                         if (!ws.rooms)
                             ws.rooms = [];
@@ -155,10 +162,10 @@ var SignRoom = /** @class */ (function () {
                             token: user.token,
                         });
                         return [4 /*yield*/, (0, timer_1.timer)(1000)];
-                    case 5:
+                    case 7:
                         _a.sent();
                         this.notifier.sendToRoom(messageTypes_1.MessageType.SIGNIN_ROOM, roomId, {
-                            nickname: nickname,
+                            username: username,
                             users: updatedRoomState.length,
                         });
                         if (room.public) {
@@ -178,13 +185,13 @@ var SignRoom = /** @class */ (function () {
     };
     SignRoom.prototype.signOut = function (data, ws) {
         return __awaiter(this, void 0, void 0, function () {
-            var roomId, nickname, roomToken, response, users, room, clients, user, updatedUsers;
+            var roomId, username, roomToken, response, users, room, clients, user, updatedUsers;
             var _a;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
-                        roomId = data.roomId, nickname = data.nickname, roomToken = data.roomToken;
-                        if (!roomId || !nickname || !roomToken)
+                        roomId = data.roomId, username = data.username, roomToken = data.roomToken;
+                        if (!roomId || !username || !roomToken)
                             throw { type: "error", message: "Invalid signout data" };
                         return [4 /*yield*/, Promise.allSettled([
                                 this.redis.get(roomId, "users"),
@@ -229,7 +236,7 @@ var SignRoom = /** @class */ (function () {
                         if (user.socketId.length > 0)
                             return [2 /*return*/];
                         this.notifier.sendToRoom(messageTypes_1.MessageType.SIGNOUT_ROOM, roomId, {
-                            nickname: nickname,
+                            username: username,
                             users: updatedUsers.length,
                         });
                         if (room.public) {
@@ -285,6 +292,15 @@ var SignRoom = /** @class */ (function () {
                         return [2 /*return*/];
                 }
             });
+        });
+    };
+    SignRoom.prototype.registerRoomHistory = function (roomId, userId) {
+        return models_1.roomHistoryModel.findOneAndUpdate({ roomId: roomId }, {
+            $addToSet: { users: userId },
+            $set: { updatedAt: new Date() },
+        }, {
+            upsert: true,
+            setDefaultsOnInsert: true,
         });
     };
     return SignRoom;

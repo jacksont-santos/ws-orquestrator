@@ -40,15 +40,14 @@ export class RedisService {
       .filter((doc) => doc !== null);
   }
 
+
   async getRoomsState(ws: CustomWebSocket): Promise<any> {
     const [publicRooms, privateRooms] = await Promise.all([
       roomModel.find({ public: true, active: true }, { _id: 1 }),
-      ws.userId
-        ? roomModel.find(
-            { public: false, active: true, ownerId: ws.userId },
-            { _id: 1 }
-          )
-        : [],
+      roomModel.find(
+        { public: false, active: true, ownerId: ws.userId },
+        { _id: 1 }
+      ),
     ]);
     const roomIds = [...publicRooms, ...privateRooms].map((room) => room._id);
     const allRoomsState = await this.getItems(roomIds, "users");
@@ -135,7 +134,7 @@ export class RedisService {
       if (user.socketId.length > 0) return;
 
       this.notifier.sendToRoom(MessageType.SIGNOUT_ROOM, roomId, {
-        nickname: user.nickname,
+        username: user.username,
         users: filtered.length,
       });
 

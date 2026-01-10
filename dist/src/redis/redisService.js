@@ -123,9 +123,7 @@ var RedisService = /** @class */ (function () {
                 switch (_b.label) {
                     case 0: return [4 /*yield*/, Promise.all([
                             models_1.roomModel.find({ public: true, active: true }, { _id: 1 }),
-                            ws.userId
-                                ? models_1.roomModel.find({ public: false, active: true, ownerId: ws.userId }, { _id: 1 })
-                                : [],
+                            models_1.roomModel.find({ public: false, active: true, ownerId: ws.userId }, { _id: 1 }),
                         ])];
                     case 1:
                         _a = _b.sent(), publicRooms = _a[0], privateRooms = _a[1];
@@ -234,7 +232,7 @@ var RedisService = /** @class */ (function () {
                         if (user.socketId.length > 0)
                             return [2 /*return*/];
                         this.notifier.sendToRoom(messageTypes_1.MessageType.SIGNOUT_ROOM, roomId, {
-                            nickname: user.nickname,
+                            username: user.username,
                             users: filtered.length,
                         });
                         return [4 /*yield*/, models_1.roomModel.findById(roomId, { public: 1, ownerId: 1 })];

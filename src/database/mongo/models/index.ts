@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 
 type Chat = {
   id: string;
-  nickname: string;
+  username: string;
   content: string;
   createdAt: Date;
 }
@@ -30,6 +30,15 @@ const roomSchema = new mongoose.Schema({
 });
 const roomModel = mongoose.model('room', roomSchema);
 
+const roomHistorySchema = new mongoose.Schema({
+  _id: { type: String, default: () => randomUUID() },
+  roomId: { type: String, required: true },
+  users: { type: Array<String>, default: [], required: true },
+  createdAt: { type: Date, default: new Date(), required: true },
+  updatedAt: { type: Date, default: new Date(), required: true },
+});
+const roomHistoryModel = mongoose.model('roomHistory', roomHistorySchema);
+
 const userSchema = new mongoose.Schema({
   _id: { type: String  },
   username: { type: String, unique: true, required: true, validate: (value) => value.length >= 4 && value.length <= 16 },
@@ -37,12 +46,12 @@ const userSchema = new mongoose.Schema({
 });
 const userModel = mongoose.model('user', userSchema);
 
-export { chatModel, roomModel, userModel };
+export { chatModel, roomModel, roomHistoryModel, userModel };
 
 export interface Message {
   _id: string;
   roomId: string;
-  nickname: string;
+  username: string;
   content: string;
   createdAt: Date;
 }

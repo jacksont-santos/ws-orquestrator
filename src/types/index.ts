@@ -15,7 +15,7 @@ export interface OutMessage {
 
 export interface RoomState {
   users: Array<{
-    nickname: string;
+    username: string;
     token: string;
     socketId?: Array<string>;
     lastMessage?: Date;

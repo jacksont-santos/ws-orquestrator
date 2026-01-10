@@ -43,10 +43,9 @@ var crypto_1 = require("crypto");
 var messageTypes_1 = require("../utils/messageTypes");
 var user_1 = require("../auth/user");
 var WSService = /** @class */ (function () {
-    function WSService(server, publicClients, privateClients, roomClients, notifier, redis, signRoom) {
+    function WSService(server, clients, roomClients, notifier, redis, signRoom) {
         var _this = this;
-        this.publicClients = publicClients;
-        this.privateClients = privateClients;
+        this.clients = clients;
         this.roomClients = roomClients;
         this.notifier = notifier;
         this.redis = redis;
@@ -151,44 +150,26 @@ var WSService = /** @class */ (function () {
     WSService.prototype.connect = function (ws, authToken) {
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                if (authToken)
-                    this.addPrivateClient(ws, authToken);
-                else
-                    this.addPublicClient(ws);
-                this.redis.getRoomsState(ws);
-                return [2 /*return*/];
-            });
-        });
-    };
-    WSService.prototype.addPrivateClient = function (ws, authToken) {
-        return __awaiter(this, void 0, void 0, function () {
-            return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0: return [4 /*yield*/, (0, user_1.setUser)(ws, authToken)];
                     case 1:
                         _a.sent();
-                        this.privateClients.set(ws.userId, new Set([ws]));
-                        this.publicClients.delete(ws.userId);
+                        this.clients.set(ws.userId, new Set([ws]));
+                        this.redis.getRoomsState(ws);
                         return [2 /*return*/];
                 }
             });
         });
     };
-    WSService.prototype.addPublicClient = function (ws) {
-        if ((0, user_1.isAuthenticated)(ws))
-            this.removePrivateClient(ws.socketId, ws.userId);
-        (0, user_1.removeUser)(ws);
-        this.publicClients.set(ws.socketId, ws);
-    };
     WSService.prototype.onChatMessage = function (ws, raw) {
         return __awaiter(this, void 0, void 0, function () {
-            var _a, roomId, nickname, content, token, chatId, err_1;
+            var _a, roomId, username, content, token, chatId, err_1;
             return __generator(this, function (_b) {
                 switch (_b.label) {
                     case 0:
                         _b.trys.push([0, 3, , 4]);
-                        _a = raw.data, roomId = _a.roomId, nickname = _a.nickname, content = _a.content, token = _a.token;
-                        if (!roomId || !nickname || !content || !token)
+                        _a = raw.data, roomId = _a.roomId, username = _a.username, content = _a.content, token = _a.token;
+                        if (!roomId || !username || !content || !token)
                             throw { type: "error", message: "Invalid chat data" };
                         return [4 /*yield*/, this.redis.verifyRoomState(roomId, token, ws.socketId)];
                     case 1:
@@ -203,7 +184,7 @@ var WSService = /** @class */ (function () {
                                         $each: [
                                             {
                                                 id: chatId,
-                                                nickname: nickname,
+                                                username: username,
                                                 content: content,
                                                 createdAt: raw.data.createdAt,
                                             },
@@ -230,8 +211,7 @@ var WSService = /** @class */ (function () {
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        this.removePublicClient(ws.socketId);
-                        this.removePrivateClient(ws.socketId, ws.userId);
+                        this.removeClient(ws.socketId, ws.userId);
                         return [4 /*yield*/, this.removeRoomClient(ws)];
                     case 1:
                         _a.sent();
@@ -240,13 +220,8 @@ var WSService = /** @class */ (function () {
             });
         });
     };
-    WSService.prototype.removePublicClient = function (socketId) {
-        this.publicClients.delete(socketId);
-    };
-    WSService.prototype.removePrivateClient = function (socketId, userId) {
-        if (!userId)
-            return;
-        var clients = this.privateClients.get(userId);
+    WSService.prototype.removeClient = function (socketId, userId) {
+        var clients = this.clients.get(userId);
         if (!clients)
             return;
         for (var _i = 0, _a = Array.from(clients); _i < _a.length; _i++) {
@@ -257,7 +232,7 @@ var WSService = /** @class */ (function () {
             }
         }
         if (clients.size === 0)
-            this.privateClients.delete(userId);
+            this.clients.delete(userId);
     };
     WSService.prototype.removeRoomClient = function (ws) {
         return __awaiter(this, void 0, void 0, function () {

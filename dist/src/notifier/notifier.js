@@ -54,9 +54,8 @@ exports.Notifier = void 0;
 var messageTypes_1 = require("../utils/messageTypes");
 var ws_1 = __importDefault(require("ws"));
 var Notifier = /** @class */ (function () {
-    function Notifier(publicClients, privateClients, roomClients) {
-        this.publicClients = publicClients;
-        this.privateClients = privateClients;
+    function Notifier(clients, roomClients) {
+        this.clients = clients;
         this.roomClients = roomClients;
     }
     Notifier.prototype.send = function (ws, data) {
@@ -87,7 +86,7 @@ var Notifier = /** @class */ (function () {
     };
     Notifier.prototype.sendToUser = function (type, userId, roomId, data) {
         var _this = this;
-        var client = this.privateClients.get(userId);
+        var client = this.clients.get(userId);
         if (!client)
             return;
         var clientsData = {
@@ -104,10 +103,9 @@ var Notifier = /** @class */ (function () {
             data: data,
         };
         var message = JSON.stringify(publicData);
-        this.privateClients.forEach(function (client) {
+        this.clients.forEach(function (client) {
             return client.forEach(function (ws) { return _this.send(ws, message); });
         });
-        this.publicClients.forEach(function (ws) { return _this.send(ws, message); });
     };
     Notifier.prototype.dispatchRoomChange = function (raw) {
         return __awaiter(this, void 0, void 0, function () {

@@ -6,8 +6,7 @@ import WebSocket from "ws";
 
 export class Notifier {
   constructor(
-    private publicClients: Map<string, CustomWebSocket>,
-    private privateClients: Map<string, Set<CustomWebSocket>>,
+    private clients: Map<string, Set<CustomWebSocket>>,
     private roomClients: Map<string, Set<CustomWebSocket>>
   ) {}
 
@@ -43,7 +42,7 @@ export class Notifier {
     roomId: string,
     data: object
   ) {
-    const client = this.privateClients.get(userId);
+    const client = this.clients.get(userId);
     if (!client) return;
 
     const clientsData: OutMessage = {
@@ -60,10 +59,9 @@ export class Notifier {
       data,
     };
     const message = JSON.stringify(publicData);
-    this.privateClients.forEach((client) =>
+    this.clients.forEach((client) =>
       client.forEach((ws) => this.send(ws, message))
     );
-    this.publicClients.forEach((ws) => this.send(ws, message));
   }
 
   async dispatchRoomChange(raw: RawMessage) {
