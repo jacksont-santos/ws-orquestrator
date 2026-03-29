@@ -1,0 +1,15 @@
+export enum MessageType {
+  CONNECTION = 'connection',
+  ADD_ROOM = 'addRoom',
+  UPDATE_ROOM = 'updateRoom',
+  REMOVE_ROOM = 'removeRoom',
+  FIRST_SIGNIN_ROOM = 'firstSigninRoom',
+  SIGNIN_ROOM = 'signinRoom',
+  SIGNOUT_ROOM = 'signoutRoom',
+  SIGNIN_REPLY = 'signinReply',
+  SIGNOUT_REPLY = 'signoutReply',
+  UPDATE_ROOM_STATE = 'updateRoomState',
+  ROOM_STATE = 'roomState',
+  ROOMS_STATE = 'roomsState',
+  CHAT = 'chat',
+}

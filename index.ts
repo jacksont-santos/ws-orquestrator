@@ -1,15 +1,15 @@
 import express from "express";
 import http from "http";
 import 'dotenv/config';
-import { connectToDatabase } from "./src/database/mongo/connection/mongo";
-import { startWebSocketServer } from "./src/ws/bootstrap";
+import { connectToMongo } from "./src/Mongo/connectToMongo";
+import { startWebSocketServer } from "./src/WebSocket/Bootstrap";
 
 const app = express();
 const server = http.createServer(app);
 
 app.use(express.json());
 
-connectToDatabase()
+connectToMongo();
 startWebSocketServer(server);
 
 const port = process.env.PORT || 3000;

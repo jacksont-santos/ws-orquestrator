@@ -1,14 +1,12 @@
-import { CustomWebSocket } from "../utils/customWebSocket";
-import { MessageType } from "../utils/messageTypes";
-import { OutMessage } from "../types";
-import { RawMessage } from "../types";
+import { CustomWebSocket } from "../WebSocket/Interfaces";
+import { MessageType } from "../WebSocket/OnMessage/MessageType";
+import { OutMessage, RawMessage } from "../WebSocket/Interfaces";
 import WebSocket from "ws";
+import { clients, roomClients } from "../instances";
 
 export class Notifier {
-  constructor(
-    private clients: Map<string, Set<CustomWebSocket>>,
-    private roomClients: Map<string, Set<CustomWebSocket>>
-  ) {}
+
+  constructor() {}
 
   send(ws: CustomWebSocket, data: any) {
     if (ws.readyState === WebSocket.OPEN) {
@@ -25,15 +23,15 @@ export class Notifier {
   }
 
   sendToRoom(type: MessageType, roomId: string, data: object) {
-    const roomClients = this.roomClients.get(roomId);
-    if (!roomClients) return;
+    const roomConnectedClients = roomClients.get(roomId);
+    if (!roomConnectedClients) return;
 
     const roomData: OutMessage = {
       type,
-      data: { ...data, _id: roomId },
+      data: { ...data, roomId },
     };
     const message = JSON.stringify(roomData);
-    for (const client of Array.from(roomClients)) this.send(client, message);
+    for (const client of Array.from(roomConnectedClients)) this.send(client, message);
   }
 
   sendToUser(
@@ -42,7 +40,7 @@ export class Notifier {
     roomId: string,
     data: object
   ) {
-    const client = this.clients.get(userId);
+    const client = clients.get(userId);
     if (!client) return;
 
     const clientsData: OutMessage = {
@@ -59,7 +57,7 @@ export class Notifier {
       data,
     };
     const message = JSON.stringify(publicData);
-    this.clients.forEach((client) =>
+    clients.forEach((client) =>
       client.forEach((ws) => this.send(ws, message))
     );
   }
@@ -76,8 +74,7 @@ export class Notifier {
         MessageType.UPDATE_ROOM
       ].includes(type)
     ) {
-      if (isPublic) this.broadcastToClients(type, data);
-      else this.sendToUser(type, userId, roomId, data);
+      this.broadcastToClients(type, data);
     };
 
     if (type == MessageType.UPDATE_ROOM_STATE) {
