@@ -1,0 +1,1 @@
+{"version":3,"file":"messageError.js","sourceRoot":"","sources":["../../../../../src/WebSocket/OnMessage/Error/messageError.ts"],"names":[],"mappings":";;;AACA,gDAA8C;AAEvC,IAAM,YAAY,GAAG,UAAC,EAAmB,EAAE,KAAU;IACxD,oBAAQ,CAAC,IAAI,CAAC,EAAE,EAAE;QACd,IAAI,EAAE,OAAO;QACb,OAAO,EAAE,wBAAwB;QACjC,IAAI,EAAE,KAAK;KACd,CAAC,CAAC;AACP,CAAC,CAAA;AANY,QAAA,YAAY,gBAMxB"}
