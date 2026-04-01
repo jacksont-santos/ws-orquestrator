@@ -18,6 +18,6 @@ server.listen(port, () => {
 });
 
 app.get("/health", (req, res) => {
-  res.send("ok");
+  res.send("orquestrator ok");
 });
 
