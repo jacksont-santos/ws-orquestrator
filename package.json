@@ -4,10 +4,12 @@
   "main": "index.js",
   "scripts": {
     "dev": "ts-node-dev --ignore-watch node_modules ./index.ts",
-    "build": "tsc",
+    "prebuild": "rimraf dist",
+    "build": "npm run prebuild && tsc",
     "start": "node dist/index.js",
     "docker:prebuild": "rm -rf dist",
-    "docker:build": "npm run docker:prebuild && tsc"
+    "docker:build": "npm run docker:prebuild && tsc",
+    "docker:start": "node dist/index.js"
   },
   "keywords": [],
   "author": "",
