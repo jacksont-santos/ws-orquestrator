@@ -1,1 +1,0 @@
-{"version":3,"file":"unauthorizedError.js","sourceRoot":"","sources":["../../../../../src/WebSocket/OnMessage/Error/unauthorizedError.ts"],"names":[],"mappings":";;;AACA,gDAA8C;AAEvC,IAAM,iBAAiB,GAAG,UAAC,EAAmB;IACjD,oBAAQ,CAAC,IAAI,CAAC,EAAE,EAAE;QACd,IAAI,EAAE,OAAO;QACb,OAAO,EAAE,cAAc;KAC1B,CAAC,CAAC;AACP,CAAC,CAAA;AALY,QAAA,iBAAiB,qBAK7B"}

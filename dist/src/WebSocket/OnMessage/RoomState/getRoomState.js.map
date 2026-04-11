@@ -1,1 +1,0 @@
-{"version":3,"file":"getRoomState.js","sourceRoot":"","sources":["../../../../../src/WebSocket/OnMessage/RoomState/getRoomState.ts"],"names":[],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,gDAA2C;AAEpC,IAAM,YAAY,GAAG,UAAO,EAAO,EAAE,IAAS;;;oBACjD,qBAAM,iBAAK,CAAC,YAAY,CAAC,EAAE,EAAE,IAAI,CAAC,EAAA;;gBAAlC,SAAkC,CAAC;;;;KACtC,CAAA;AAFY,QAAA,YAAY,gBAExB"}
